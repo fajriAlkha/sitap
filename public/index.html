@@ -9,33 +9,40 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   </head>
   <body>
-    <div class="simulation">MODE SIMULASI · SELURUH DATA DAN TINDAKAN BERSIFAT FIKTIF <button id="change-role">Ganti Role</button></div>
+    <div class="simulation">MODE SIMULASI · SELURUH DATA DAN TINDAKAN BERSIFAT FIKTIF <button id="change-role">Ganti Profil</button></div>
     <header>
       <a class="brand" href="#/" aria-label="SITAP - Beranda">
         <img class="brand-logo-full" src="/sitap-logo-full.png" alt="SITAP"/>
         <img class="brand-logo-mark" src="/sitap-logo-mark.png" alt="" aria-hidden="true"/>
       </a>
-      <div class="header-search">
-        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input aria-label="Pencarian global" placeholder="Cari pengajuan, ID, atau wilayah..."/>
-      </div>
       <div class="header-right">
         <button class="demo-chip" id="demo-mode-toggle" type="button" aria-pressed="false" aria-label="Nyalakan Mode Demo">
           <span class="demo-chip-dot"></span>
           <span>Mode Demo</span>
         </button>
+        <div class="notifications-dropdown">
+          <button class="notification-toggle" id="notifications-toggle" type="button" aria-label="Buka notifikasi" aria-haspopup="dialog" aria-expanded="false" aria-controls="notifications-panel">
+            <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+            <span class="notification-count" id="notification-count" hidden></span>
+          </button>
+          <div class="notifications-panel" id="notifications-panel" role="dialog" aria-label="Notifikasi" hidden>
+            <div class="notifications-panel-header"><strong>Notifikasi</strong></div>
+            <div class="notifications-list" id="notifications-list"><p class="notification-empty">Klik untuk memuat notifikasi.</p></div>
+          </div>
+        </div>
         <div class="profile-dropdown">
           <button class="profile-chip" id="profile-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span id="active-role-name">Pengunjung Publik</span>
+            <span id="active-role-name">Ahmad Pratama</span>
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
           </button>
-          <div class="profile-menu" id="profile-menu" role="menu" aria-label="Pilih peran" hidden></div>
+          <div class="profile-menu" id="profile-menu" role="menu" aria-label="Pilih profil" hidden></div>
         </div>
         <div class="avatar-circle" id="active-role-avatar">P</div>
       </div>
     </header>
     <main id="app"></main>
+    <aside id="demo-guide" class="demo-guide" aria-label="Panduan demo terpandu" aria-live="polite" hidden></aside>
     <div id="toast" role="status"></div>
     <script type="module" src="/app.js"></script>
   </body>

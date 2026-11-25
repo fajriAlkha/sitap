@@ -1,9 +1,26 @@
 const $=s=>document.querySelector(s), app=$('#app');
-const roles={public:['Publik','Informasi terbuka, statistik wilayah, dan pelacakan pengajuan.','◉'],citizen:['Masyarakat','Membuat, memantau, dan mengevaluasi pengajuan simulasi.','♙'],village:['Operator Desa','Memverifikasi dan meneruskan pengajuan tingkat lokal.','⌂'],district:['Operator Kecamatan','Mengkoordinasikan pengajuan lintas desa dan wilayah.','⌘'],opd:['Operator OPD','Melakukan penanganan teknis dan memperbarui realisasi.','▣'],official:['Pejabat Berwenang','Menetapkan keputusan demo dengan alasan dan pertimbangan.','⚖'],auditor:['Auditor/Pengawas','Memeriksa audit trail secara read-only.','◌'],admin:['Administrator Demo','Memulihkan data dan mengelola skenario simulasi.','⚙']};
-let activeRole=localStorage.getItem('sitap-role')||'public',demoStep=Number(localStorage.getItem('sitap-demo-step')||0),provinceMap=null;
+const roles={citizen:['Masyarakat','Mencari informasi publik dan melihat detail sesuai domisili serta pengajuan sendiri.','♙'],village:['Pemerintah Desa','Memverifikasi dan meneruskan pengajuan tingkat desa.','⌂'],district:['Pemerintah Kecamatan','Mengkoordinasikan pengajuan tingkat kecamatan.','⌘'],opd:['Operator OPD','Melakukan penanganan teknis dan memperbarui realisasi.','▣'],official:['Pejabat Berwenang','Menetapkan keputusan demo dengan alasan dan pertimbangan.','⚖'],central:['Pemerintah Pusat','Meninjau dokumen daerah dan memberi persetujuan pusat dalam demo.','⌂'],auditor:['Auditor/Pengawas','Memeriksa audit trail secara read-only.','◌'],admin:['Administrator Demo','Memulihkan data dan mengelola skenario simulasi.','⚙']};
+const profiles=[
+  {id:'citizen-ahmad',name:'Ahmad Pratama',role:'citizen',area:{province:'Jawa Tengah',regency:'Kota Semarang',district:'Kecamatan Tembalang',village:'Kelurahan Tembalang'}},
+  {id:'citizen-andi',name:'Andi Pratama',role:'citizen',area:{province:'Jawa Tengah',regency:'Kabupaten Arunika',district:'Kecamatan Cendana',village:'Desa Sukamaju'}},
+  {id:'village-nadia',name:'Nadia Permata',role:'village',area:{province:'Jawa Tengah',regency:'Kabupaten Arunika',district:'Kecamatan Cendana',village:'Desa Sukamaju'},institution:'Kantor Desa Sukamaju'},
+  {id:'district-arief',name:'Arief Mahendra',role:'district',area:{province:'Jawa Tengah',regency:'Kabupaten Arunika',district:'Kecamatan Cendana'},institution:'Kecamatan Cendana'},
+  {id:'opd-dian',name:'Dian Anggraini',role:'opd',area:{province:'Jawa Tengah',regency:'Kabupaten Arunika'},institution:'Dinas Pekerjaan Umum Kabupaten Arunika'},
+  {id:'official-lestari',name:'Ir. Lestari Wibowo',role:'official',area:{province:'Jawa Tengah',regency:'Kabupaten Arunika'},institution:'Pemerintah Kabupaten Arunika'},
+  {id:'central-demo',name:'Pusat SITAP Demo',role:'central',area:{},institution:'Pemerintah Pusat - Kementerian SITAP Demo'},
+  {id:'auditor-bima',name:'Bima Wirawan',role:'auditor',area:{},institution:'Inspektorat Demo'},
+  {id:'admin-demo',name:'Admin Demo',role:'admin',area:{},institution:'SITAP Demo'}
+];
+const storedProfileId=localStorage.getItem('sitap-profile');
+const legacyRole=localStorage.getItem('sitap-role');
+const legacyProfile=legacyRole==='citizen'?'citizen-andi':profiles.find(profile=>profile.role===legacyRole)?.id;
+let activeProfile=profiles.find(profile=>profile.id===storedProfileId)||profiles.find(profile=>profile.id===legacyProfile)||profiles[0];
+let activeRole=activeProfile.role,demoStep=Number(localStorage.getItem('sitap-demo-step')||0),provinceMap=null;
 let demoMode=localStorage.getItem('sitap-demo-mode')==='true';
+let guidedDemoActive=localStorage.getItem('sitap-guided-demo')==='true';
 const api=(url,opt)=>fetch(url,opt).then(async r=>{const x=await r.json().catch(()=>({}));if(!r.ok)throw Error(x.error||'Permintaan gagal');return x});
 function esc(v=''){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c])}
+function profileAreaLabel(area){return Object.values(area||{}).filter(Boolean).join(', ')||'Nasional'}
 function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),3200)}
 function syncDemoMode(){
   const toggle=$('#demo-mode-toggle');
@@ -16,13 +33,14 @@ function setDemoMode(enabled){demoMode=enabled;localStorage.setItem('sitap-demo-
 const demoModeToggle=$('#demo-mode-toggle');
 demoModeToggle.addEventListener('click',()=>setDemoMode(!demoMode));
 syncDemoMode();
-function headerRoleLabel(role){return role==='public'?'Pengunjung Publik':(roles[role]||roles.public)[0]}
+function apiForRole(url,role=activeRole){const separator=url.includes('?')?'&':'?';return api(`${url}${separator}role=${encodeURIComponent(role)}&profile=${encodeURIComponent(activeProfile.id)}`)}
+function headerRoleLabel(){return activeProfile.name}
 function syncProfileDropdown(){
   const name=$('#active-role-name'),avatar=$('#active-role-avatar'),menu=$('#profile-menu');
-  const label=headerRoleLabel(activeRole);
+  const label=headerRoleLabel();
   if(name)name.textContent=label;
   if(avatar)avatar.textContent=label.charAt(0).toUpperCase();
-  if(menu)menu.querySelectorAll('[data-role]').forEach(item=>item.setAttribute('aria-checked',String(item.dataset.role===activeRole)));
+  if(menu)menu.querySelectorAll('[data-profile]').forEach(item=>item.setAttribute('aria-checked',String(item.dataset.profile===activeProfile.id)));
 }
 function setProfileDropdownOpen(open,restoreFocus){
   const toggle=$('#profile-menu-toggle'),menu=$('#profile-menu');
@@ -32,7 +50,7 @@ function setProfileDropdownOpen(open,restoreFocus){
 }
 function initProfileDropdown(){
   const container=$('.profile-dropdown'),toggle=$('#profile-menu-toggle'),menu=$('#profile-menu');
-  menu.innerHTML=Object.entries(roles).map(([role])=>`<button type="button" role="menuitemradio" data-role="${role}" aria-checked="false">${esc(headerRoleLabel(role))}</button>`).join('');
+  menu.innerHTML=profiles.map(profile=>`<button type="button" role="menuitemradio" data-profile="${profile.id}" aria-checked="false"><span>${esc(profile.name)}</span><small>${esc(roles[profile.role][0])} &middot; ${esc(profileAreaLabel(profile.area))}</small></button>`).join('');
   syncProfileDropdown();
   toggle.addEventListener('click',()=>{
     const open=menu.hidden;
@@ -43,10 +61,10 @@ function initProfileDropdown(){
     }
   });
   menu.addEventListener('click',event=>{
-    const item=event.target.closest('[data-role]');
+    const item=event.target.closest('[data-profile]');
     if(!item)return;
     setProfileDropdownOpen(false,true);
-    setRole(item.dataset.role);
+    setProfile(item.dataset.profile);
   });
   menu.addEventListener('keydown',event=>{
     const items=Array.from(menu.querySelectorAll('button'));
@@ -67,22 +85,118 @@ function initProfileDropdown(){
     if(event.key==='Escape'&&!menu.hidden)setProfileDropdownOpen(false,true);
   });
 }
-function setRole(role){activeRole=role;localStorage.setItem('sitap-role',role);syncProfileDropdown();location.hash=role==='public'?'#/public':`#/role/${role}`}
+function initNotificationDropdown(){
+  const container=$('.notifications-dropdown'),toggle=$('#notifications-toggle');
+  const panel=$('#notifications-panel'),list=$('#notifications-list'),count=$('#notification-count');
+  function setOpen(open){
+    panel.hidden=!open;
+    toggle.setAttribute('aria-expanded',String(open));
+    if(open)toggle.setAttribute('aria-label','Tutup notifikasi');
+    else toggle.setAttribute('aria-label','Buka notifikasi');
+  }
+  async function loadNotifications(){
+    const cases=await apiForRole('/api/cases');
+    const visible=activeRole==='citizen'?cases.filter(c=>c.owner_profile_id===activeProfile.id||c.owner_name===activeProfile.name):cases;
+    const recent=visible.slice(0,5);
+    count.hidden=recent.length===0;
+    count.textContent=String(recent.length);
+    list.innerHTML=recent.length?recent.map(c=>`<a class="notification-item" href="#/case/${encodeURIComponent(c.case_id)}"><strong>${esc(c.title)}</strong><span>Informasi pengajuan &middot; ${new Date(c.created_at).toLocaleDateString('id-ID')}</span></a>`).join(''):'<p class="notification-empty">Belum ada notifikasi.</p>';
+  }
+  toggle.addEventListener('click',async()=>{
+    const open=panel.hidden;
+    setOpen(open);
+    if(!open)return;
+    list.innerHTML='<p class="notification-empty">Memuat notifikasi...</p>';
+    try{await loadNotifications()}
+    catch(error){list.innerHTML=`<p class="notification-empty" role="alert">Notifikasi gagal dimuat: ${esc(error.message)}</p>`}
+  });
+  list.addEventListener('click',event=>{
+    if(event.target.closest('a.notification-item'))setOpen(false);
+  });
+  document.addEventListener('click',event=>{
+    if(!container.contains(event.target))setOpen(false);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!panel.hidden){setOpen(false);toggle.focus()}
+  });
+}
+function setProfile(profileId,targetHash='#/dashboard'){
+  const profile=profiles.find(item=>item.id===profileId);
+  if(!profile){toast('Profil demo tidak ditemukan.');return}
+  activeProfile=profile;activeRole=profile.role;
+  localStorage.setItem('sitap-profile',profile.id);
+  localStorage.setItem('sitap-role',profile.role);
+  syncProfileDropdown();
+  renderDemoGuide();
+  if(location.hash===targetHash)route();
+  else location.hash=targetHash;
+}
 initProfileDropdown();
+initNotificationDropdown();
 function icon(d){return `<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">${d}</svg>`}
 const ICONS={dash:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',submit:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',stats:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',map:'<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/>',audit:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',report:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'};
+
+const allRoles=Object.keys(roles);
+const operatorRoles=['village','district','opd','official'];
+const sidebarFeatures=[
+  {id:'dashboard',label:'Dashboard',href:'#/dashboard',icon:ICONS.dash,roles:allRoles,activeOn:['dashboard']},
+  {id:'public',label:'Informasi Publik',href:'#/public',icon:ICONS.report,roles:allRoles,activeOn:['public','public-case']},
+  {id:'cases',label:'Pengajuan',href:()=>operatorRoles.includes(activeRole)?'#/inbox':'#/cases',icon:ICONS.submit,roles:allRoles,activeOn:['cases','case','inbox']},
+  {id:'statistics',label:'Statistik',href:'#/statistics',icon:ICONS.stats,roles:allRoles,activeOn:['statistics']},
+  {id:'map',label:'Peta Pengajuan',href:'#/map',icon:ICONS.map,roles:allRoles,activeOn:['map']},
+  {id:'report',label:'Laporan',href:'#/report',icon:ICONS.report,roles:allRoles,activeOn:['report']},
+  {id:'audit',label:'Audit Trail',href:'#/audit',icon:ICONS.audit,roles:['auditor','admin'],activeOn:['audit']},
+  {id:'new',label:'Buat Pengajuan',href:'#/new',icon:ICONS.submit,roles:['citizen'],activeOn:['new']},
+  {id:'mine',label:'Pengajuan Saya',href:'#/mine',icon:ICONS.submit,roles:['citizen'],activeOn:['mine']},
+  {id:'inbox',label:'Inbox Pengajuan',href:'#/inbox',icon:ICONS.submit,roles:operatorRoles,activeOn:['inbox'],hidden:true},
+  {id:'documents',label:'Dokumen & QR',href:'#/documents',icon:ICONS.report,roles:['village','district','opd','official','central','admin'],activeOn:['documents']},
+  {id:'demo',label:'Demo Terpandu',href:'#/demo',icon:ICONS.dash,roles:allRoles,activeOn:['demo'],hidden:true},
+  {id:'admin-data',label:'Data Simulasi',href:'#/role/admin',icon:ICONS.report,roles:['admin'],activeOn:['role/admin'],hidden:true}
+];
+
+function featureAllowed(featureId){
+  const feature=sidebarFeatures.find(item=>item.id===featureId);
+  return Boolean(feature&&feature.roles.includes(activeRole));
+}
+
+function featureWarning(featureId){
+  const feature=sidebarFeatures.find(item=>item.id===featureId);
+  if(!feature||featureAllowed(featureId))return '';
+  const allowed=feature.roles.map(role=>roles[role][0]).join(', ');
+  return `<div class="role-warning" role="status"><b>Akses tidak tersedia.</b> Fitur ${esc(feature.label)} hanya dapat dibuka oleh: ${esc(allowed)}.</div>`;
+}
+
+function isActiveFeature(feature,path){
+  return feature.activeOn.includes(path)||feature.activeOn.includes(path.split('/')[0])
+    ||(feature.id==='dashboard'&&path.startsWith('role/')&&path!=='role/admin');
+}
+
+function currentFeatureId(){
+  const path=location.hash.slice(2).split(/[?#]/)[0];
+  if(path==='inbox')return 'inbox';
+  if(path==='role/admin')return 'admin-data';
+  return sidebarFeatures.find(feature=>isActiveFeature(feature,path))?.id||null;
+}
 
 function badge(x){let cls=/Ditolak|Tidak dapat/.test(x)?'no':/Selesai|Diterima|Terverifikasi/.test(x)?'ok':/Diajukan|Menunggu|Perlu/.test(x)?'warn':/Dalam Pelaksanaan/.test(x)?'purple':/Dalam Proses|Dalam Penanganan|Diteruskan/.test(x)?'inprogress':'info';return `<span class="badge ${cls}">${esc(x)}</span>`}
 
 function sidebarHtml(){
-  const pubMenus=[['Dashboard','#/public',ICONS.dash],['Pengajuan','#/public',ICONS.submit],['Statistik','#/public',ICONS.stats],['Peta Pengajuan','#/public',ICONS.map],['Audit Trail','#/audit',ICONS.audit],['Laporan','#/public',ICONS.report],['Pengaturan','#/explore',ICONS.settings]];
-  return `<aside class="sidebar"><nav class="sidebar-nav">${pubMenus.map(([label,href,ic],i)=>`<a href="${href}" class="${i===0?'active':''}">${icon(ic)} ${label}</a>`).join('')}</nav><div class="sidebar-demo-box"><div class="sidebar-demo-box-header"><div class="demo-lamp"><svg width="12" height="12" fill="none" stroke="#0d2a50" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 21h6M12 3a6 6 0 0 1 6 6c0 3-2 5-3 6H9c-1-1-3-3-3-6a6 6 0 0 1 6-6z"/></svg></div><b data-demo-status>${demoMode?'Mode Demo Aktif':'Mode Demo Nonaktif'}</b></div><p>Seluruh data pada purwarupa ini bersifat fiktif untuk keperluan demonstrasi.</p><button class="btn-reset" onclick="window.resetDemo()">Reset ke Data Awal</button></div><div class="sitap-footer">&copy; 2025 SITAP &mdash; Purwarupa<br>Bukan layanan resmi pemerintah.</div></aside>`
+  const path=location.hash.slice(2).split(/[?#]/)[0];
+  const links=sidebarFeatures.filter(feature=>!feature.hidden).map(feature=>{
+    const active=isActiveFeature(feature,path);
+    const allowed=feature.roles.includes(activeRole);
+    const title=allowed?feature.label:`${feature.label} — akses terbatas untuk role ini`;
+    const href=typeof feature.href==='function'?feature.href():feature.href;
+    return `<a href="${href}" data-feature="${feature.id}" class="${active?'active':''}${allowed?'':' role-limited'}"${active?' aria-current="page"':''} title="${esc(title)}">${icon(feature.icon)}<span>${feature.label}</span>${allowed?'':'<span class="sidebar-access-hint" aria-hidden="true">!</span>'}</a>`;
+  }).join('');
+  return `<aside class="sidebar"><nav class="sidebar-nav" aria-label="Navigasi utama">${links}</nav><div class="sidebar-demo-box"><div class="sidebar-demo-box-header"><div class="demo-lamp"><svg width="12" height="12" fill="none" stroke="#0d2a50" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 21h6M12 3a6 6 0 0 1 6 6c0 3-2 5-3 6H9c-1-1-3-3-3-6a6 6 0 0 1 6-6z"/></svg></div><b data-demo-status>${demoMode?'Mode Demo Aktif':'Mode Demo Nonaktif'}</b></div><p>Seluruh data pada purwarupa ini bersifat fiktif untuk keperluan demonstrasi.</p><button class="btn-reset" onclick="window.resetDemo()">Reset ke Data Awal</button></div><div class="sitap-footer">&copy; 2025 SITAP &mdash; Purwarupa<br>Bukan layanan resmi pemerintah.</div></aside>`
 }
 
-function shell(title,content){
-  const r=roles[activeRole]||roles.public;
-  const menus=activeRole==='public'?[['Dashboard','#/public',ICONS.dash],['Pengajuan','#/public',ICONS.submit],['Statistik','#/public',ICONS.stats],['Peta Pengajuan','#/public',ICONS.map],['Audit Trail','#/audit',ICONS.audit],['Laporan','#/public',ICONS.report],['Pengaturan','#/explore',ICONS.settings]]:activeRole==='citizen'?[['Dashboard Saya','#/role/citizen',ICONS.dash],['Buat Pengajuan','#/new',ICONS.submit],['Pengajuan Saya','#/mine',ICONS.submit],['Notifikasi','#/mine',ICONS.report]]:activeRole==='auditor'?[['Ringkasan Audit','#/role/auditor',ICONS.dash],['Log Aktivitas','#/audit',ICONS.audit]]:activeRole==='admin'?[['Data Simulasi','#/role/admin',ICONS.dash],['Reset Skenario','#/role/admin',ICONS.settings]]:[['Dashboard',`#/role/${activeRole}`,ICONS.dash],['Inbox Pengajuan','#/inbox',ICONS.submit],['Dokumen & QR','#/documents',ICONS.report]];
-  return `<div class="app-body" style="min-height:0"><aside class="sidebar"><nav class="sidebar-nav">${menus.map((m,i)=>`<a href="${m[1]}" class="${i===0?'active':''}">${icon(m[2])} ${m[0]}</a>`).join('')}</nav><div class="sidebar-demo-box"><div class="sidebar-demo-box-header"><div class="demo-lamp"><svg width="12" height="12" fill="none" stroke="#0d2a50" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 21h6M12 3a6 6 0 0 1 6 6c0 3-2 5-3 6H9c-1-1-3-3-3-6a6 6 0 0 1 6-6z"/></svg></div><b data-demo-status>${demoMode?'Mode Demo Aktif':'Mode Demo Nonaktif'}</b></div><p>Seluruh data bersifat fiktif untuk keperluan demonstrasi.</p><button class="btn-reset" onclick="window.resetDemo()">Reset ke Data Awal</button></div><div class="sitap-footer">&copy; 2025 SITAP &mdash; Purwarupa<br>Bukan layanan resmi pemerintah.</div></aside><section class="main-content"><div class="page-head"><div><div class="eyebrow">Role aktif &middot; ${r[0]}</div><h1>${title}</h1></div><button class="secondary" onclick="window.pickRole()">Ganti Role</button></div>${content}</section></div>`
+function shell(title,content,featureId){
+  const r=roles[activeRole]||roles.citizen;
+  const currentFeature=featureId||currentFeatureId();
+  const pageContent=currentFeature&&!featureAllowed(currentFeature)?featureWarning(currentFeature):content;
+  return `<div class="app-body" style="min-height:0">${sidebarHtml()}<section class="main-content"><div class="page-head"><div><div class="eyebrow">${esc(activeProfile.name)} &middot; ${r[0]} &middot; ${esc(profileAreaLabel(activeProfile.area))}</div><h1>${title}</h1></div><button class="secondary" onclick="window.pickRole()">Ganti Profil</button></div>${pageContent}</section></div>`
 }
 
 async function stats(){return api('/api/stats')}
@@ -94,6 +208,63 @@ function statCards(s){
 
 function table(cases){
   return `<div class="table-wrap"><table><thead><tr><th>ID & Judul</th><th>Wilayah</th><th>Instansi</th><th>Proses</th><th>Keputusan</th></tr></thead><tbody>${cases.map(c=>`<tr><td><a class="case-link" href="#/case/${c.case_id}">${c.case_id}</a><br><b>${esc(c.title)}</b></td><td>${esc(c.village)}, ${esc(c.regency)}</td><td>${esc(c.responsible_institution||'—')}</td><td>${badge(c.process_status)}</td><td>${badge(c.decision_outcome)}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:16px;color:#8098b4">Belum ada data yang sesuai.</td></tr>'}</tbody></table></div>`
+}
+
+function publicCaseTable(cases){
+  return `<div class="table-wrap"><table><thead><tr><th>Program / pengajuan</th><th>Kategori</th><th>Wilayah umum</th><th>Informasi publik</th></tr></thead><tbody>${cases.map(c=>{
+    const result=c.decision_outcome==='Diterima'?badge('Disetujui'):c.decision_outcome==='Ditolak'?badge('Tidak dilanjutkan'):badge('Ringkasan tersedia');
+    return `<tr><td><a class="case-link" href="#/public-case/${encodeURIComponent(c.case_id)}">${esc(c.title)}</a><br><small>${esc(c.public_summary||c.title)}</small></td><td>${esc(c.category)}</td><td>${esc(c.regency)}, ${esc(c.province)}</td><td>${result}</td></tr>`
+  }).join('')||'<tr><td colspan="4" style="text-align:center;padding:16px;color:#8098b4">Belum ada data yang sesuai.</td></tr>'}</tbody></table></div>`
+}
+
+function provinceCounts(cases){
+  const counts=new Map();
+  cases.forEach(c=>{const province=c.province||'Lainnya';counts.set(province,(counts.get(province)||0)+1)});
+  return [...counts.entries()].sort((a,b)=>b[1]-a[1]);
+}
+
+async function casesPage(){
+  const cases=await apiForRole('/api/cases','public');
+  const provinces=[...new Set(cases.map(c=>c.province).filter(Boolean))].sort();
+  const regencies=[...new Set(cases.map(c=>c.regency).filter(Boolean))].sort();
+  app.innerHTML=shell('Telusuri Program di Seluruh Indonesia',`<p class="notice">Cari program berdasarkan nama, kategori, provinsi, atau kabupaten/kota. Daftar ini menampilkan ringkasan informasi publik, bukan tahapan administratif.</p><div class="filters"><input id="public-search" aria-label="Cari program atau wilayah" placeholder="Cari nama program atau wilayah..."><select id="public-province"><option value="">Semua provinsi</option>${provinces.map(v=>`<option>${esc(v)}</option>`).join('')}</select><select id="public-regency"><option value="">Semua kabupaten/kota</option>${regencies.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div><div id="public-case-table">${publicCaseTable(cases)}</div>`,'cases');
+  function filter(){
+    const query=$('#public-search').value.trim().toLowerCase(),province=$('#public-province').value,regency=$('#public-regency').value;
+    const matches=cases.filter(c=>(!query||`${c.case_id} ${c.title} ${c.category} ${c.province} ${c.regency}`.toLowerCase().includes(query))&&(!province||c.province===province)&&(!regency||c.regency===regency));
+    $('#public-case-table').innerHTML=publicCaseTable(matches);
+  }
+  $('#public-search').oninput=filter;
+  $('#public-province').onchange=filter;
+  $('#public-regency').onchange=filter;
+}
+
+async function statisticsPage(){
+  const [s,cases]=await Promise.all([stats(),apiForRole('/api/cases')]);
+  if(activeRole==='citizen'){
+    const outcomes=[
+      ['Program disetujui',cases.filter(c=>c.decision_outcome==='Diterima').length],
+      ['Tidak dilanjutkan',cases.filter(c=>c.decision_outcome==='Ditolak').length],
+      ['Informasi hasil belum diumumkan',cases.filter(c=>!c.decision_outcome).length]
+    ];
+    app.innerHTML=shell('Statistik Wilayah',`${statCards(s)}<div class="panel section"><h3>Hasil yang dapat dipublikasikan</h3><div class="status-bars">${outcomes.map(([label,count])=>`<div class="sbar-row"><div class="sbar-meta"><span class="sbar-name">${label}</span><span class="sbar-pct">${count} program</span></div><div class="sbar-track"><div class="sbar-fill" style="width:${cases.length?Math.round(count/cases.length*100):0}%;background:#1a5fcc"></div></div></div>`).join('')}</div><p class="muted section">Tahapan administratif tidak ditampilkan dalam statistik publik.</p></div>`,'statistics');
+    return;
+  }
+  const statuses=[...new Set(cases.map(c=>c.process_status))].map(status=>[
+    status,cases.filter(c=>c.process_status===status).length
+  ]);
+  app.innerHTML=shell('Statistik',`${statCards(s)}<div class="panel section"><h3>Pengajuan menurut status</h3><div class="status-bars">${statuses.map(([status,count])=>`<div class="sbar-row"><div class="sbar-meta"><span class="sbar-name">${esc(status)}</span><span class="sbar-pct">${count} kasus</span></div><div class="sbar-track"><div class="sbar-fill" style="width:${s.total?Math.round(count/s.total*100):0}%;background:#1a5fcc"></div></div></div>`).join('')}</div></div>`,'statistics');
+}
+
+async function mapPage(){
+  const cases=await apiForRole('/api/cases'),provRows=provinceCounts(cases);
+  app.innerHTML=shell('Peta Pengajuan',`<div class="panel"><div class="panel-head"><div><h3>Sebaran per Provinsi</h3><p class="panel-sub">Peta interaktif OpenStreetMap</p></div></div><div id="province-map" class="map-container" role="application" aria-label="Peta interaktif sebaran pengajuan per provinsi"></div><p class="map-note" id="province-map-note" aria-live="polite"></p><div class="section">${provRows.map(([province,count])=>`<div class="sbar-row"><div class="sbar-meta"><span class="sbar-name">${esc(province)}</span><span class="sbar-pct">${count} kasus</span></div><div class="sbar-track"><div class="sbar-fill" style="width:${cases.length?Math.round(count/cases.length*100):0}%;background:#1a5fcc"></div></div></div>`).join('')}</div></div>`,'map');
+  initializeProvinceMap(provRows);
+}
+
+async function reportPage(){
+  const [s,cases]=await Promise.all([stats(),apiForRole('/api/cases')]);
+  const listing=activeRole==='citizen'?publicCaseTable(cases):table(cases);
+  app.innerHTML=shell('Laporan',`<p class="notice">Ringkasan data dan program publik pada dataset simulasi saat ini. Tahapan proses tidak ditampilkan untuk akses umum.</p>${statCards(s)}<div class="panel section"><div class="panel-head"><h3>Program dan hasil publik</h3><span class="muted">${cases.length} kasus</span></div>${listing}</div>`,'report');
 }
 
 /* ── PETA INDONESIA GEOGRAFIS ── */
@@ -265,7 +436,7 @@ async function landing(){
     <div class="hero-left">
       <div class="eyebrow">Purwarupa civic-tech &middot; data simulasi</div>
       <h1>Dari aspirasi<br>ke aksi yang<br>dapat ditelusuri.</h1>
-      <p>SITAP menghubungkan pengajuan masyarakat, proses administrasi, keputusan, pelaksanaan, dan pengawasan dalam satu alur yang terbuka.</p>
+      <p>SITAP menghubungkan aspirasi dengan tindak lanjut pemerintah. Informasi publik dapat ditelusuri lintas wilayah, sementara rincian proses mengikuti wilayah dan kewenangan.</p>
       <div class="hero-actions">
         <a class="button demo-cta" href="#/demo">Ikuti Demo Terpandu <span class="demo-cta-arrow" aria-hidden="true">&nearr;</span></a>
         <a class="button secondary" href="#/explore">Jelajahi Manual</a>
@@ -289,7 +460,7 @@ async function landing(){
 <section class="section home-features">
   <h2>Cara kerja SITAP</h2>
   <div class="cards">
-    <div class="card"><div class="role-icon"><svg width="22" height="22" fill="none" stroke="#1a5fcc" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></div><h3>Terhubung antarperan</h3><p>Setiap perubahan status oleh satu peran langsung tampil pada timeline, dashboard, dan audit trail yang sama.</p></div>
+    <div class="card"><div class="role-icon"><svg width="22" height="22" fill="none" stroke="#1a5fcc" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></div><h3>Terhubung antarperan</h3><p>Setiap tindakan tercatat. Rincian tahapan hanya tampil bagi warga wilayah terkait atau role berwenang; publik melihat ringkasan dan hasil yang diumumkan.</p></div>
     <div class="card"><div class="role-icon"><svg width="22" height="22" fill="none" stroke="#1a5fcc" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div><h3>Transparan sesuai porsi</h3><p>Portal publik hanya memperlihatkan data yang layak dibuka &mdash; tanpa identitas warga atau dokumen sensitif.</p></div>
     <div class="card"><div class="role-icon"><svg width="22" height="22" fill="none" stroke="#1a5fcc" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><h3>Setiap tindakan tercatat</h3><p>Setiap langkah penting menyimpan aktor, waktu, alasan, dan perubahan status secara kronologis di audit trail.</p></div>
   </div>
@@ -317,15 +488,12 @@ async function landing(){
 
 
 async function publicPage(){
-  const [s,cases]=await Promise.all([stats(),api('/api/cases')]);
+  const [s,cases]=await Promise.all([stats(),apiForRole('/api/cases','public')]);
   const featured=cases.slice(0,5);
   const total=s.total||0, selesai=s.completed||0, proses=s.inProgress||0, ditolak=s.rejected||0;
   const pct=n=>total?Math.round(n/total*100):0;
 
-  /* Kelompokkan berdasarkan provinsi dari data nyata */
-  const byProv={};
-  cases.forEach(c=>{const p=c.province||'Lainnya';byProv[p]=(byProv[p]||0)+1});
-  const provRows=Object.entries(byProv).sort((a,b)=>b[1]-a[1]);
+  const provRows=provinceCounts(cases);
 
   app.innerHTML=`
 <div class="app-body">
@@ -335,10 +503,10 @@ ${sidebarHtml()}
 <!-- HEADER BERANDA: langsung ke poin, tanpa hero banner dekoratif -->
 <div class="dash-header">
   <div class="dash-header-left">
-    <h1>Dashboard Publik <span class="tag-simulasi">Data Simulasi</span></h1>
+    <h1>Informasi Publik <span class="tag-simulasi">Data Simulasi</span></h1>
     <p>Ringkasan pengajuan masyarakat yang dapat dipantau secara terbuka &mdash; data diambil langsung dari server.</p>
   </div>
-  <a href="#/explore" class="button secondary">Ganti Peran &rarr;</a>
+  <a href="#/explore" class="button secondary">Ganti Profil &rarr;</a>
 </div>
 
 <!-- STAT CARDS: angka nyata dari API, tanpa grafik dekoratif -->
@@ -352,10 +520,10 @@ ${sidebarHtml()}
   </div>
   <div class="stat-card">
     <div class="stat-card-top">
-      <span class="stat-label">Sedang Diproses</span>
+      <span class="stat-label">Belum Selesai</span>
     </div>
     <div class="stat-value">${proses}</div>
-    <div class="stat-desc">Belum selesai ditangani</div>
+    <div class="stat-desc">Angka agregat, tanpa rincian tahapan</div>
   </div>
   <div class="stat-card">
     <div class="stat-card-top">
@@ -369,7 +537,7 @@ ${sidebarHtml()}
       <span class="stat-label">Tidak Dilanjutkan</span>
     </div>
     <div class="stat-value">${ditolak}</div>
-    <div class="stat-desc">Alasan tersedia di detail kasus</div>
+    <div class="stat-desc">Keputusan yang telah diumumkan</div>
   </div>
 </div>
 
@@ -393,38 +561,32 @@ ${sidebarHtml()}
       </div>
     </div>
 
-    <!-- TABEL PENGAJUAN TERBARU -->
+    <!-- DAFTAR PROGRAM PUBLIK -->
     <div class="panel">
       <div class="panel-head">
-        <h3>Pengajuan Terbaru</h3>
-        <a href="#/public">Lihat Semua &rarr;</a>
+        <h3>Program dan Aspirasi Terbaru</h3>
+        <a href="#/cases">Lihat Semua &rarr;</a>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>ID Pengajuan</th>
-              <th>Judul</th>
-              <th>Wilayah</th>
-              <th>Instansi</th>
-              <th>Tgl. Masuk</th>
-              <th>Status</th>
-              <th></th>
+              <th>Program / pengajuan</th>
+              <th>Kategori</th>
+              <th>Wilayah umum</th>
+              <th>Informasi publik</th>
             </tr>
           </thead>
           <tbody>
             ${featured.map(c=>{
-              const tgl=c.created_at?new Date(c.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}):'—';
+              const result=c.decision_outcome==='Diterima'?badge('Disetujui'):c.decision_outcome==='Ditolak'?badge('Tidak dilanjutkan'):badge('Ringkasan tersedia');
               return `<tr>
-                <td><a class="case-link" href="#/case/${c.case_id}">${esc(c.case_id)}</a></td>
-                <td><div class="td-title">${esc(c.title)}</div><div class="td-meta">${esc(c.category)}</div></td>
+                <td><a class="case-link" href="#/public-case/${encodeURIComponent(c.case_id)}">${esc(c.title)}</a><div class="td-meta">${esc(c.public_summary||c.title)}</div></td>
+                <td>${esc(c.category)}</td>
                 <td><div class="td-title">${esc(c.regency||'—')}</div><div class="td-meta">${esc(c.province||'')}</div></td>
-                <td style="font-size:12px;max-width:140px">${esc(c.responsible_institution||'—')}</td>
-                <td style="font-size:12px;white-space:nowrap">${tgl}</td>
-                <td>${badge(c.process_status)}</td>
-                <td><button class="action-btn" title="Lihat detail" onclick="location.hash='#/case/${c.case_id}'">${icon('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>')}</button></td>
+                <td>${result}</td>
               </tr>`
-            }).join('')||'<tr><td colspan="7" style="text-align:center;padding:18px;color:#8098b4">Belum ada data.</td></tr>'}
+            }).join('')||'<tr><td colspan="4" style="text-align:center;padding:18px;color:#8098b4">Belum ada data.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -453,29 +615,13 @@ ${sidebarHtml()}
       </div>
     </div>
 
-    <!-- RINGKASAN STATUS: bar horizontal, bukan donut dekoratif -->
+    <!-- BATAS INFORMASI PUBLIK -->
     <div class="panel">
       <div class="panel-head">
-        <h3>Ringkasan Status</h3>
+        <h3>Informasi Sesuai Kebutuhan</h3>
       </div>
-      <div class="status-bars">
-        <div class="sbar-row">
-          <div class="sbar-meta"><span class="sbar-name">Selesai Direalisasikan</span><span class="sbar-pct">${selesai} kasus (${pct(selesai)}%)</span></div>
-          <div class="sbar-track"><div class="sbar-fill" style="width:${pct(selesai)}%;background:#0e8a6a"></div></div>
-        </div>
-        <div class="sbar-row">
-          <div class="sbar-meta"><span class="sbar-name">Sedang Diproses</span><span class="sbar-pct">${proses} kasus (${pct(proses)}%)</span></div>
-          <div class="sbar-track"><div class="sbar-fill" style="width:${pct(proses)}%;background:#1a5fcc"></div></div>
-        </div>
-        <div class="sbar-row">
-          <div class="sbar-meta"><span class="sbar-name">Tidak Dilanjutkan</span><span class="sbar-pct">${ditolak} kasus (${pct(ditolak)}%)</span></div>
-          <div class="sbar-track"><div class="sbar-fill" style="width:${pct(ditolak)}%;background:#c0640a"></div></div>
-        </div>
-        <div class="sbar-row">
-          <div class="sbar-meta"><span class="sbar-name">Belum Ditindaklanjuti</span><span class="sbar-pct">${s.pending||0} kasus (${pct(s.pending||0)}%)</span></div>
-          <div class="sbar-track"><div class="sbar-fill" style="width:${pct(s.pending||0)}%;background:#9baabb"></div></div>
-        </div>
-      </div>
+      <p class="muted">Publik dapat mencari program, kategori, wilayah umum, dan hasil yang sudah diumumkan di seluruh Indonesia. Tahapan administratif ditampilkan setelah program disetujui atau kepada warga di wilayah terkait.</p>
+      <p class="muted section">Identitas pelapor, lokasi rinci, dokumen pribadi, dan catatan internal tidak ditampilkan.</p>
     </div>
 
     <!-- INFO QR: fungsional, bukan dekoratif -->
@@ -501,17 +647,17 @@ ${sidebarHtml()}
     <h3>Telusuri Semua Pengajuan</h3>
   </div>
   <div class="filters" style="margin-bottom:12px">
-    <input id="search" placeholder="Cari ID atau judul pengajuan...">
-    <select id="filter-status">
-      <option value="">Semua status proses</option>
-      ${[...new Set(cases.map(c=>c.process_status))].map(v=>`<option>${v}</option>`).join('')}
-    </select>
+    <input id="search" aria-label="Cari program atau wilayah" placeholder="Cari nama program, kategori, atau wilayah...">
     <select id="filter-prov">
       <option value="">Semua provinsi</option>
       ${[...new Set(cases.map(c=>c.province).filter(Boolean))].map(v=>`<option>${v}</option>`).join('')}
     </select>
+    <select id="filter-regency">
+      <option value="">Semua kabupaten/kota</option>
+      ${[...new Set(cases.map(c=>c.regency).filter(Boolean))].map(v=>`<option>${v}</option>`).join('')}
+    </select>
   </div>
-  <div id="case-table">${table(cases)}</div>
+  <div id="case-table">${publicCaseTable(cases)}</div>
 </div>
 
 </div>
@@ -519,78 +665,252 @@ ${sidebarHtml()}
 
   function filter(){
     const q=$('#search').value.toLowerCase();
-    const st=$('#filter-status').value;
     const pv=$('#filter-prov').value;
-    $('#case-table').innerHTML=table(cases.filter(c=>
-      (!q||`${c.case_id} ${c.title}`.toLowerCase().includes(q))&&
-      (!st||c.process_status===st)&&
-      (!pv||c.province===pv)
+    const regency=$('#filter-regency').value;
+    $('#case-table').innerHTML=publicCaseTable(cases.filter(c=>
+      (!q||`${c.case_id} ${c.title} ${c.category} ${c.regency} ${c.province}`.toLowerCase().includes(q))&&
+      (!pv||c.province===pv)&&(!regency||c.regency===regency)
     ));
   }
   $('#search').oninput=filter;
-  $('#filter-status').onchange=filter;
   $('#filter-prov').onchange=filter;
+  $('#filter-regency').onchange=filter;
   initializeProvinceMap(provRows);
 }
 
-function rolePicker(){app.innerHTML=`<section class="section"><div class="eyebrow">Jelajahi Manual</div><h1>Pilih konteks simulasi</h1><p class="muted">Pemilihan peran hanya mengatur pengalaman demo, bukan autentikasi sistem produksi.</p><div class="cards">${Object.entries(roles).map(([k,r])=>`<div class="card"><div class="role-icon">${r[2]}</div><h3>${r[0]}</h3><p>${r[1]}</p><button onclick="window.selectRole('${k}')">Masuk sebagai ${r[0]}</button></div>`).join('')}</div></section>`}
+function rolePicker(){app.innerHTML=`<section class="section"><div class="eyebrow">Jelajahi Manual</div><h1>Pilih profil demo</h1><p class="muted">Setiap profil membawa identitas, peran, dan wilayah domisili simulasi. Ini bukan proses login produksi.</p><div class="cards">${profiles.map(profile=>`<div class="card"><div class="role-icon">${roles[profile.role][2]}</div><h3>${esc(profile.name)}</h3><p><b>${esc(roles[profile.role][0])}</b><br>${esc(profileAreaLabel(profile.area))}</p><p>${esc(roles[profile.role][1])}</p><button onclick="window.selectProfile('${profile.id}')">Pilih profil</button></div>`).join('')}</div></section>`}
 
-const demo=[['Publik melihat masalah','Pengunjung melihat dashboard wilayah dan contoh pengajuan yang terbuka.','public','#/public'],['Masyarakat mengajukan aspirasi','Buka formulir pengajuan dan kirim usulan perbaikan jalan. ID pengajuan dibuat oleh server.','citizen','#/new'],['Operator desa memverifikasi','Periksa kelengkapan dan ubah status menjadi terverifikasi.','village','#/inbox'],['OPD menangani','Teruskan atau perbarui progres penanganan teknis.','opd','#/inbox'],['Pejabat memutuskan','Keputusan diterima atau ditolak selalu memerlukan alasan dan dasar pertimbangan.','official','#/inbox'],['OPD mencatat realisasi','Perbarui progres pelaksanaan dan bukti simulasi.','opd','#/inbox'],['Masyarakat mengevaluasi','Berikan rating setelah kasus memungkinkan evaluasi.','citizen','#/mine'],['Auditor memeriksa','Audit trail bersifat baca-saja dan memperlihatkan aktor serta waktu.','auditor','#/audit']];
+const demo=[
+  {title:'Informasi Publik',role:'citizen',profileId:'citizen-ahmad',href:'#/public',explanation:'Masyarakat mencari ringkasan program lintas wilayah. Data pribadi dan proses internal tidak dibuka di halaman ini.',instruction:'Buka salah satu program untuk melihat informasi publik yang tersedia.'},
+  {title:'Pengajuan aspirasi',role:'citizen',profileId:'citizen-ahmad',href:'#/new',explanation:'Warga mengirim usulan; wilayah domisili dan tujuan pemerintahan disesuaikan dengan profil yang sedang digunakan.',instruction:'Isi contoh usulan, pilih tingkat tujuan, lalu kirim pengajuan.'},
+  {title:'Pemeriksaan Pemerintah Desa',role:'village',profileId:'village-nadia',href:'#/inbox',explanation:'Pemerintah Desa memeriksa kelengkapan dan meneruskan pengajuan ke instansi yang sesuai.',instruction:'Pilih pengajuan, tulis catatan pemeriksaan, lalu verifikasi atau teruskan.'},
+  {title:'Koordinasi Pemerintah Kecamatan',role:'district',profileId:'district-arief',href:'#/inbox',explanation:'Kecamatan meninjau pengajuan yang melibatkan koordinasi beberapa desa sebelum diteruskan ke dinas.',instruction:'Buka pengajuan dan catat hasil koordinasi sebelum meneruskan.'},
+  {title:'Penanganan teknis oleh OPD',role:'opd',profileId:'opd-dian',href:'#/inbox',explanation:'OPD menangani substansi usulan serta memperbarui progres dan bukti pelaksanaan.',instruction:'Perbarui progres penanganan pada detail pengajuan.'},
+  {title:'Persetujuan pejabat daerah',role:'official',profileId:'official-lestari',href:'#/inbox',explanation:'Pejabat berwenang menilai usulan dan mencatat keputusan beserta alasan serta dasar pertimbangannya.',instruction:'Buka antrean keputusan dan simpan keputusan dengan alasan yang jelas.'},
+  {title:'Pengiriman dokumen ke pusat',role:'opd',profileId:'opd-dian',href:'#/documents',explanation:'Instansi daerah mendaftarkan dokumen dan mengarahkannya ke Pemerintah Pusat untuk ditinjau.',instruction:'Daftarkan dokumen dengan tujuan Pemerintah Pusat - Kementerian SITAP Demo.'},
+  {title:'Pemeriksaan dan persetujuan pusat',role:'central',profileId:'central-demo',href:'#/documents',explanation:'Profil Pemerintah Pusat memeriksa dokumen masuk, menulis catatan, lalu menyetujui atau meminta perbaikan.',instruction:'Tinjau dokumen berstatus Menunggu Persetujuan Pusat dan pilih keputusan.'},
+  {title:'Audit perjalanan',role:'auditor',profileId:'auditor-bima',href:'#/audit',explanation:'Auditor meninjau jejak perubahan untuk melihat aktor, waktu, dan keputusan sepanjang alur.',instruction:'Buka audit trail untuk menutup demonstrasi.'}
+];
 
-function demoPage(){let d=demo[demoStep]||demo[0];app.innerHTML=`<section class="section"><div class="eyebrow">Demo terpandu &middot; ${demoStep+1}/${demo.length}</div><h1>Ikuti satu perjalanan data SITAP</h1><div class="demo-panel"><div class="step">TAHAP ${demoStep+1} &middot; ROLE: ${roles[d[2]][0].toUpperCase()}</div><h3>${d[0]}</h3><p>${d[1]}</p><div class="actions"><button class="secondary" onclick="window.demoNav(-1)" ${demoStep===0?'disabled':''}>Kembali</button><button onclick="window.openDemoStep()">Lihat halaman terkait</button><button class="secondary" onclick="window.demoNav(1)" ${demoStep===demo.length-1?'disabled':''}>Lanjut</button><button class="secondary" onclick="window.resetDemo()">Reset demo</button></div></div><div class="progress"><i style="width:${(demoStep+1)/demo.length*100}%"></i></div><p class="notice">Setiap tindakan tetap dilakukan pada halaman nyata. Ketika status diubah, dashboard publik, detail pengajuan, dan log audit membaca data server yang sama.</p></section>`}
+function renderDemoGuide(){
+  const panel=$('#demo-guide');
+  if(!panel)return;
+  document.body.classList.toggle('demo-guide-active',guidedDemoActive);
+  if(!guidedDemoActive){panel.hidden=true;panel.innerHTML='';return}
+  const step=demo[Math.max(0,Math.min(demo.length-1,demoStep))];
+  const stepProfile=profiles.find(profile=>profile.id===step.profileId);
+  const percent=((demoStep+1)/demo.length)*100;
+  const matchingProfile=activeProfile.id===step.profileId;
+  panel.hidden=false;
+  panel.innerHTML=`<div class="demo-guide-copy"><div class="demo-guide-meta"><span>Demo terpandu · Langkah ${demoStep+1} dari ${demo.length}</span><span>${esc(roles[step.role][0])} · ${esc(stepProfile?.name||'')}</span></div><h2>${esc(step.title)}</h2><p>${esc(step.explanation)} <b>${esc(step.instruction)}</b></p><div class="demo-guide-progress"><i style="width:${percent}%"></i></div></div><div class="demo-guide-actions"><button type="button" onclick="window.demoNav(-1)" ${demoStep===0?'disabled':''}>Sebelumnya</button><button type="button" onclick="window.openDemoStep()">${matchingProfile?'Buka bagian ini':'Ganti profil & buka'}</button><button type="button" class="demo-guide-next" onclick="window.demoNav(1)">${demoStep===demo.length-1?'Selesai':'Berikutnya'}</button><button type="button" class="demo-guide-close" onclick="window.closeGuidedDemo()">Tutup</button></div>`;
+}
 
-function newCase(){app.innerHTML=shell('Buat Pengajuan',`<p class="notice">Setelah dikirim, pengajuan memperoleh nomor pelacakan dan muncul pada inbox operator simulasi.</p><form id="new-case"><div class="form-grid"><label>Judul pengajuan<input name="title" required placeholder="Contoh: Perbaikan jalan lingkungan"></label><label>Jenis pengajuan<select name="type"><option>Aspirasi</option><option>Pengaduan</option><option>Permintaan informasi</option></select></label><label>Kategori<select name="category"><option>Usulan Pembangunan</option><option>Infrastruktur</option><option>Kesehatan</option><option>Pendidikan</option></select></label><label>Visibilitas informasi<select name="visibility"><option value="public">Publik (ringkasan disaring)</option><option value="terbatas">Terbatas</option></select></label></div><label>Deskripsi<textarea name="description" required placeholder="Jelaskan masalah atau usulan dengan jelas."></textarea></label><div class="form-grid"><label>Provinsi<input name="province" value="Jawa Tengah" required></label><label>Kabupaten/kota<input name="regency" value="Kabupaten Arunika" required></label><label>Kecamatan<input name="district" value="Kecamatan Cendana" required></label><label>Desa/kelurahan<input name="village" value="Desa Sukamaju" required></label><label>Lokasi spesifik<input name="location" placeholder="RT/RW atau patokan lokasi"></label><label>Lampiran simulasi<input type="file" name="attachment" accept="image/*,.pdf"></label></div><button>Kirim Pengajuan</button></form>`);$('#new-case').onsubmit=async e=>{e.preventDefault();try{let r=await api('/api/cases',{method:'POST',body:new FormData(e.target)});toast(`Pengajuan berhasil dibuat: ${r.caseId}`);location.hash=`#/case/${r.caseId}`}catch(x){toast(x.message)}}}
+function demoPage(){
+  guidedDemoActive=true;
+  localStorage.setItem('sitap-guided-demo','true');
+  app.innerHTML=`<section class="section"><div class="eyebrow">Demo terpandu · alur peran-ke-peran</div><h1>Dari aspirasi warga sampai persetujuan dokumen pusat</h1><p class="muted">Ikuti alur dengan panel panduan yang tetap terlihat saat berpindah halaman. Setiap langkah menunjukkan nama profil, peran, bagian aplikasi, dan tindakan yang perlu dicoba. Selesaikan tindakan lalu tekan Berikutnya.</p><div class="demo-overview">${demo.map((step,index)=>{const profile=profiles.find(item=>item.id===step.profileId);return `<article class="demo-overview-step"><span>LANGKAH ${index+1} · ${esc(roles[step.role][0])} · ${esc(profile?.name||'')}</span><h3>${esc(step.title)}</h3><p>${esc(step.explanation)}</p></article>`}).join('')}</div><div class="demo-panel"><b>Alur utama</b><p>Masyarakat → Desa → Kecamatan → OPD → Pejabat daerah → dokumen ke Pemerintah Pusat → persetujuan pusat → audit.</p><button type="button" onclick="window.openDemoStep()">Mulai langkah ${demoStep+1}</button></div></section>`;
+  renderDemoGuide();
+}
 
-function actionForm(c){if(['village','district'].includes(activeRole))return `<form id="action"><h3>Verifikasi &amp; penerusan</h3><label>Catatan verifikasi<textarea name="note" required placeholder="Tuliskan hasil pemeriksaan."></textarea></label><label>Instansi tujuan<input name="target" value="Dinas Pekerjaan Umum Kabupaten Arunika" required></label><div class="actions"><button value="verify">Verifikasi</button><button class="secondary" value="route">Teruskan</button></div></form>`;if(activeRole==='opd')return `<form id="action" enctype="multipart/form-data"><h3>Pembaruan progres</h3><label>Progres 0–100<input type="number" name="progress" min="0" max="100" value="${c.progress}"></label><label>Status proses<select name="status"><option>Dalam Penanganan</option><option>Dalam Pelaksanaan</option><option>Selesai</option></select></label><label>Catatan pelaksanaan<textarea name="note" required></textarea></label><label>Bukti pelaksanaan simulasi<input type="file" name="evidence"></label><button>Perbarui progres</button></form>`;if(activeRole==='official')return `<form id="action"><h3>Keputusan simulasi</h3><label>Hasil keputusan<select name="outcome"><option>Diterima</option><option>Ditolak</option></select></label><label>Alasan keputusan<textarea name="reason" required></textarea></label><label>Dasar pertimbangan<textarea name="consideration" required></textarea></label><button>Simpan keputusan</button></form>`;if(activeRole==='citizen'&&c.owner_name==='Andi Pratama'&&(['Selesai','Dalam Pelaksanaan'].includes(c.process_status)||c.decision_outcome!=='Belum ada'))return `<form id="action"><h3>Evaluasi pemerintah</h3><div class="form-grid">${[['responsiveness','Responsivitas'],['transparency','Transparansi'],['timeliness','Ketepatan waktu'],['resultScore','Hasil penyelesaian']].map(r=>`<label>${r[1]}<select name="${r[0]}">${[5,4,3,2,1].map(x=>`<option value="${x}">${x} / 5</option>`).join('')}</select></label>`).join('')}</div><label>Komentar<textarea name="comment"></textarea></label><button>Kirim evaluasi</button></form>`;return `<div class="card"><h3>Informasi akses</h3><p class="muted">Tidak ada tindakan yang tersedia untuk peran ini. Pilih peran lain untuk melanjutkan alur simulasi.</p></div>`}
+function newCase(){
+  if(!featureAllowed('new')){
+    app.innerHTML=shell('Buat Pengajuan','', 'new');
+    return;
+  }
+  const area=activeProfile.area;
+  const targetLevels=[['village','Desa/Kelurahan'],['district','Kecamatan'],['regency','Kabupaten/Kota'],['province','Provinsi']];
+  const availableLevels=targetLevels.filter(([key])=>area[key]);
+  const defaultLevel=availableLevels[0]?.[0]||'';
+  app.innerHTML=shell('Buat Pengajuan',`<p class="notice">Profil ${esc(activeProfile.name)} sudah mengenali domisili ${esc(profileAreaLabel(area))}. Pilih tingkat pemerintahan tujuan; wilayah tujuan akan mengikuti data profil.</p><form id="new-case"><div class="form-grid"><label>Judul pengajuan<input name="title" required placeholder="Contoh: Perbaikan jalan lingkungan"></label><label>Jenis pengajuan<select name="type"><option>Aspirasi</option><option>Pengaduan</option><option>Permintaan informasi</option></select></label><label>Kategori<select name="category"><option>Usulan Pembangunan</option><option>Infrastruktur</option><option>Kesehatan</option><option>Pendidikan</option></select></label><label>Visibilitas informasi<select name="visibility"><option value="public">Publik (ringkasan disaring)</option><option value="terbatas">Terbatas</option></select></label><label>Tingkat pemerintahan tujuan<select name="submissionLevel" id="submission-level" required>${availableLevels.map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select></label><label>Wilayah tujuan (otomatis)<input id="submission-area" name="submissionArea" value="${esc(area[defaultLevel]||'')}" readonly required></label></div><label>Uraian lengkap<textarea name="description" required placeholder="Jelaskan masalah atau usulan. Jangan masukkan data pribadi yang tidak diperlukan."></textarea></label><label>Ringkasan untuk publik (opsional)<textarea name="publicSummary" maxlength="240" placeholder="Ringkasan singkat tanpa nama, kontak, alamat rinci, atau data pribadi."></textarea></label><p class="muted">Lokasi masalah mengikuti domisili profil. Tambahkan patokan lokasi jika diperlukan.</p><div class="form-grid"><label>Provinsi<input name="province" value="${esc(area.province||'')}" readonly required></label><label>Kabupaten/kota<input name="regency" value="${esc(area.regency||'')}" readonly required></label><label>Kecamatan<input name="district" value="${esc(area.district||'')}" readonly required></label><label>Desa/kelurahan<input name="village" value="${esc(area.village||'')}" readonly required></label><label>Lokasi spesifik<input name="location" placeholder="Patokan lokasi, tanpa data pribadi"></label><label>Lampiran simulasi<input type="file" name="attachment" accept="image/*,.pdf"></label></div><button>Kirim Pengajuan</button></form>`,'new');
+  $('#submission-level').onchange=event=>{$('#submission-area').value=area[event.target.value]||''};
+  $('#new-case').onsubmit=async e=>{
+    e.preventDefault();
+    try{
+      const body=new FormData(e.target);
+      body.append('profileId',activeProfile.id);
+      let r=await api('/api/cases',{method:'POST',body});
+      if(guidedDemoActive&&demoStep===1)localStorage.setItem('sitap-guided-case-id',r.caseId);
+      toast(`Pengajuan berhasil dibuat: ${r.caseId}`);
+      location.hash=`#/case/${r.caseId}`;
+    }catch(x){toast(x.message)}
+  };
+}
 
-async function caseDetail(id){try{const c=await api(`/api/cases/${id}`);app.innerHTML=shell(c.title,`<div class="notice"><b>${c.case_id}</b> &middot; ${c.category} &middot; ${esc(c.village)}, ${esc(c.district)}, ${esc(c.regency)}</div><div class="detail-grid section"><div class="grid"><div class="card"><div class="actions">${badge(c.process_status)} ${badge(c.decision_outcome)} ${badge(c.implementation_status)}</div><h3>Ringkasan pengajuan</h3><p>${esc(c.description)}</p><p class="muted"><b>Instansi:</b> ${esc(c.responsible_institution)}<br><b>Pelapor simulasi:</b> ${esc(c.owner_name)}</p>${c.progress?`<b>Realisasi ${c.progress}%</b><div class="progress"><i style="width:${c.progress}%"></i></div>`:''}</div>${c.decision?`<div class="card"><h3>Keputusan: ${badge(c.decision.outcome)}</h3><p><b>Alasan:</b> ${esc(c.decision.reason)}</p><p><b>Dasar:</b> ${esc(c.decision.consideration)}</p><small>Simulasi oleh ${esc(c.decision.official)}</small></div>`:''}<div class="card"><h3>Riwayat aktivitas</h3><div class="timeline">${c.events.map(e=>`<div class="event"><b>${esc(e.action)}</b><br><span>${esc(e.note||'')}</span><br><small>${esc(e.actor)} &middot; ${esc(e.role)} &middot; ${new Date(e.created_at).toLocaleString('id-ID')}</small></div>`).join('')}</div></div></div><aside>${actionForm(c)}</aside></div>`);const f=$('#action');if(f)f.onsubmit=async e=>{e.preventDefault();try{let endpoint='',body;const form=new FormData(f);if(activeRole==='opd'){endpoint=`/api/cases/${id}/progress`;form.append('role','opd');body=form}else{let o=Object.fromEntries(form);o.role=activeRole;endpoint=activeRole==='official'?`/api/cases/${id}/decision`:activeRole==='citizen'?`/api/cases/${id}/feedback`:e.submitter?.value==='route'?`/api/cases/${id}/route`:`/api/cases/${id}/verify`;body=JSON.stringify(o)}await api(endpoint,{method:'POST',headers:body instanceof FormData?{}:{'Content-Type':'application/json'},body});toast('Perubahan tersimpan dan dicatat pada audit trail.');caseDetail(id)}catch(x){toast(x.message)}}}catch(x){app.innerHTML=`<p>${esc(x.message)}</p>`}}
+function actionForm(c){
+  if(['village','district'].includes(activeRole))return `<form id="action"><h3>Verifikasi &amp; penerusan</h3><label>Catatan verifikasi<textarea name="note" required placeholder="Tuliskan hasil pemeriksaan."></textarea></label><label>Instansi tujuan<input name="target" value="Dinas Pekerjaan Umum Kabupaten Arunika" required></label><div class="actions"><button value="verify">Verifikasi</button><button class="secondary" value="route">Teruskan</button></div></form>`;
+  if(activeRole==='opd')return `<form id="action" enctype="multipart/form-data"><h3>Pembaruan progres</h3><label>Progres 0–100<input type="number" name="progress" min="0" max="100" value="${c.progress}"></label><label>Status proses<select name="status"><option>Dalam Penanganan</option><option>Dalam Pelaksanaan</option><option>Selesai</option></select></label><label>Catatan pelaksanaan<textarea name="note" required></textarea></label><label>Bukti pelaksanaan simulasi<input type="file" name="evidence"></label><button>Perbarui progres</button></form>`;
+  if(activeRole==='official')return `<form id="action"><h3>Keputusan simulasi</h3><label>Hasil keputusan<select name="outcome"><option>Diterima</option><option>Ditolak</option></select></label><label>Alasan keputusan<textarea name="reason" required></textarea></label><label>Dasar pertimbangan<textarea name="consideration" required></textarea></label><button>Simpan keputusan</button></form>`;
+  const isOwner=c.owner_profile_id===activeProfile.id||c.owner_name===activeProfile.name;
+  if(activeRole==='citizen'&&isOwner&&(['Selesai','Dalam Pelaksanaan'].includes(c.process_status)||c.decision_outcome!=='Belum ada'))return `<form id="action"><h3>Evaluasi pemerintah</h3><div class="form-grid">${[['responsiveness','Responsivitas'],['transparency','Transparansi'],['timeliness','Ketepatan waktu'],['resultScore','Hasil penyelesaian']].map(r=>`<label>${r[1]}<select name="${r[0]}">${[5,4,3,2,1].map(x=>`<option value="${x}">${x} / 5</option>`).join('')}</select></label>`).join('')}</div><label>Komentar<textarea name="comment"></textarea></label><button>Kirim evaluasi</button></form>`;
+  return `<div class="card"><h3>Informasi akses</h3><p class="muted">Tidak ada tindakan yang tersedia untuk peran ini. Pilih profil lain untuk melanjutkan alur simulasi.</p></div>`;
+}
 
-async function inbox(){const cases=await api('/api/cases');let title=activeRole==='official'?'Antrean Keputusan':activeRole==='opd'?'Antrean Penanganan':'Inbox Pengajuan';let filtered=cases.filter(c=>activeRole==='official'?c.process_status==='Menunggu Keputusan'||c.decision_outcome==='Belum ada':activeRole==='opd'?['Diteruskan','Dalam Penanganan','Dalam Pelaksanaan'].includes(c.process_status):true);app.innerHTML=shell(title,`<p class="muted">Pilih satu pengajuan untuk menampilkan tindakan sesuai peran aktif.</p>${table(filtered)}`)}
+async function caseDetail(id,viewRole=activeRole){
+  try{
+    const c=await apiForRole(`/api/cases/${encodeURIComponent(id)}`,viewRole);
+    const publicViewer=['public','citizen'].includes(viewRole);
+    if(publicViewer){
+      const local=c.detail_scope==='local',approved=c.detail_scope==='approved',hasStages=local||approved;
+      const area=local?`${c.village}, ${c.district}, ${c.regency}`:`${c.regency}, ${c.province}`;
+      const eventRows=(c.events||[]).map(e=>`<div class="event"><b>${esc(e.action)}</b>${e.after_status?`<br><span>${esc(e.after_status)}</span>`:''}${e.note?`<br><span>${esc(e.note)}</span>`:''}${e.actor?`<br><small>${esc(e.actor)} &middot; ${esc(e.role)} &middot; ${new Date(e.created_at).toLocaleString('id-ID')}</small>`:`<br><small>${new Date(e.created_at).toLocaleString('id-ID')}</small>`}</div>`).join('');
+      const content=`<div class="notice"><b>${esc(c.category)}</b> &middot; ${esc(area)}${c.decision_outcome?` &middot; ${badge(c.decision_outcome)}`:''}</div><div class="detail-grid section"><div class="grid"><div class="card">${hasStages?`<div class="actions">${c.process_status?badge(c.process_status):''} ${c.implementation_status?badge(c.implementation_status):''}</div>`:''}<h3>Ringkasan program</h3><p>${esc(local?c.description:(c.public_summary||c.title))}</p>${local&&c.responsible_institution?`<p class="muted"><b>Instansi penanggung jawab:</b> ${esc(c.responsible_institution)}</p>`:''}${hasStages&&c.progress?`<b>Realisasi ${c.progress}%</b><div class="progress"><i style="width:${c.progress}%"></i></div>`:''}</div>${local&&c.decision?`<div class="card"><h3>Keputusan: ${badge(c.decision.outcome)}</h3><p><b>Alasan:</b> ${esc(c.decision.reason)}</p><p><b>Dasar:</b> ${esc(c.decision.consideration)}</p></div>`:''}${hasStages?`<div class="card"><h3>${local?'Riwayat wilayah':'Tahapan program yang disetujui'}</h3><div class="timeline">${eventRows||'<p class="muted">Belum ada riwayat publik.</p>'}</div></div>`:`<div class="card" role="status"><h3>Detail proses belum ditampilkan</h3><p class="muted">Rincian administratif hanya tersedia bagi warga di wilayah terkait dan role yang berwenang. Tahapan program lintas wilayah ditampilkan setelah disetujui.</p></div>`}</div>${local?`<aside>${actionForm(c)}</aside>`:''}</div>`;
+      app.innerHTML=shell(c.title,content,viewRole==='public'?'public':'cases');
+      return;
+    }
+    const submissionTarget=c.submission_area?`<br><b>Tingkat tujuan:</b> ${esc(c.submission_level)} &middot; ${esc(c.submission_area)}`:'';
+    const content=`<div class="notice"><b>${esc(c.case_id)}</b> &middot; ${esc(c.category)} &middot; ${esc(c.village)}, ${esc(c.district)}, ${esc(c.regency)}${submissionTarget}</div><div class="detail-grid section"><div class="grid"><div class="card"><div class="actions">${badge(c.process_status)} ${badge(c.decision_outcome)} ${badge(c.implementation_status)}</div><h3>Ringkasan pengajuan</h3><p>${esc(c.description)}</p><p class="muted"><b>Instansi:</b> ${esc(c.responsible_institution)}<br><b>Pelapor simulasi:</b> ${esc(c.owner_name)}</p>${c.progress?`<b>Realisasi ${c.progress}%</b><div class="progress"><i style="width:${c.progress}%"></i></div>`:''}</div>${c.decision?`<div class="card"><h3>Keputusan: ${badge(c.decision.outcome)}</h3><p><b>Alasan:</b> ${esc(c.decision.reason)}</p><p><b>Dasar:</b> ${esc(c.decision.consideration)}</p><small>Simulasi oleh ${esc(c.decision.official)}</small></div>`:''}<div class="card"><h3>Riwayat aktivitas</h3><div class="timeline">${c.events.map(e=>`<div class="event"><b>${esc(e.action)}</b><br><span>${esc(e.note||'')}</span><br><small>${esc(e.actor)} &middot; ${esc(e.role)} &middot; ${new Date(e.created_at).toLocaleString('id-ID')}</small></div>`).join('')}</div></div></div><aside>${actionForm(c)}</aside></div>`;
+    app.innerHTML=shell(c.title,content);
+    const f=$('#action');
+    if(f)f.onsubmit=async e=>{
+      e.preventDefault();
+      try{
+        let endpoint='',body;const form=new FormData(f);
+        if(activeRole==='opd'){endpoint=`/api/cases/${id}/progress`;form.append('role','opd');form.append('profileId',activeProfile.id);body=form}
+        else{let o=Object.fromEntries(form);o.role=activeRole;o.profileId=activeProfile.id;endpoint=activeRole==='official'?`/api/cases/${id}/decision`:activeRole==='citizen'?`/api/cases/${id}/feedback`:e.submitter?.value==='route'?`/api/cases/${id}/route`:`/api/cases/${id}/verify`;body=JSON.stringify(o)}
+        await api(endpoint,{method:'POST',headers:body instanceof FormData?{}:{'Content-Type':'application/json'},body});
+        toast('Perubahan tersimpan dan dicatat pada audit trail.');caseDetail(id,viewRole)
+      }catch(x){toast(x.message)}
+    };
+  }catch(x){app.innerHTML=`<p>${esc(x.message)}</p>`}
+}
 
-async function mine(){const cases=(await api('/api/cases')).filter(c=>c.owner_name==='Andi Pratama');app.innerHTML=shell('Pengajuan Saya',`${table(cases)}`)}
+async function inbox(){
+  if(!featureAllowed('inbox')){app.innerHTML=shell('Inbox Pengajuan','', 'inbox');return}
+  const cases=await apiForRole('/api/cases');
+  let title=activeRole==='official'?'Antrean Keputusan':activeRole==='opd'?'Antrean Penanganan':'Inbox Pengajuan';
+  let filtered=cases.filter(c=>activeRole==='official'?c.process_status==='Menunggu Keputusan'||c.decision_outcome==='Belum ada':activeRole==='opd'?['Diteruskan','Dalam Penanganan','Dalam Pelaksanaan'].includes(c.process_status):true);
+  app.innerHTML=shell(title,`<p class="muted">Pilih satu pengajuan untuk menampilkan tindakan sesuai peran aktif.</p>${table(filtered)}`)
+}
 
-async function audit(){const rows=await api('/api/audit');app.innerHTML=shell('Audit Trail',`<p class="notice">Peran auditor bersifat hanya-baca. Riwayat tidak dapat diubah atau dihapus melalui antarmuka.</p><div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Kasus</th><th>Aktivitas</th><th>Aktor</th><th>Perubahan</th></tr></thead><tbody>${rows.map(e=>`<tr><td style="font-size:11px;white-space:nowrap">${new Date(e.created_at).toLocaleString('id-ID')}</td><td><a class="case-link" href="#/case/${e.case_id}">${e.case_id}</a><br><small>${esc(e.title)}</small></td><td>${esc(e.action)}<br><small>${esc(e.note||'')}</small></td><td>${esc(e.actor)}<br><small>${esc(e.role)} &middot; ${esc(e.institution)}</small></td><td style="font-size:12px">${esc(e.before_status||'—')} &rarr; ${esc(e.after_status||'—')}</td></tr>`).join('')}</tbody></table></div>`)}
+async function mine(){if(!featureAllowed('mine')){app.innerHTML=shell('Pengajuan Saya','', 'mine');return}const cases=(await apiForRole('/api/cases')).filter(c=>c.owner_profile_id===activeProfile.id||c.owner_name===activeProfile.name);app.innerHTML=shell('Pengajuan Saya',`${table(cases)}`)}
 
-function documents(){app.innerHTML=shell('Registrasi Dokumen & QR',`<p class="notice">QR hanya memuat tautan token verifikasi, bukan NIK atau isi dokumen sensitif. Keputusan tidak berubah karena pemindaian QR.</p><form id="doc"><div class="form-grid"><label>Judul dokumen<input name="title" required></label><label>ID kasus terkait (opsional)<input name="caseId" placeholder="SITAP-ASP-2026-000001"></label><label>Instansi pengaju<input name="sourceInstitution" required></label><label>Instansi tujuan<input name="targetInstitution" required></label><label>Nomor surat<input name="letterNumber" required></label><label>Tanggal surat<input type="date" name="letterDate" required></label></div><label>Deskripsi<textarea name="description"></textarea></label><label>File dokumen simulasi<input type="file" name="file" accept=".pdf,.doc,.docx"></label><button>Registrasikan dokumen</button></form><div id="doc-result"></div>`);$('#doc').onsubmit=async e=>{e.preventDefault();try{const r=await api('/api/documents',{method:'POST',body:new FormData(e.target)});const d=await api(`/api/documents/${r.documentId}`);$('#doc-result').innerHTML=`<div class="card section"><h3>Dokumen berhasil diregistrasikan</h3><p><b>${d.document_id}</b><br>Token verifikasi aman dibuat untuk metadata dokumen.</p><img src="${d.qrDataUrl}" width="180" alt="QR verifikasi ${d.document_id}"><div class="actions"><a class="button" href="/api/documents/${d.document_id}/qr.png" download>Unduh QR PNG</a><a class="button secondary" href="/api/documents/${d.document_id}/cover-sheet">Unduh Lembar Kendali PDF</a><a class="button secondary" href="#/verify/${d.verification_token}">Buka Verifikasi</a></div></div>`;toast('ID dan QR berhasil dibuat.')}catch(x){toast(x.message)}}}
+async function audit(){if(!featureAllowed('audit')){app.innerHTML=shell('Audit Trail','', 'audit');return}const rows=await apiForRole('/api/audit');app.innerHTML=shell('Audit Trail',`<p class="notice">Peran auditor bersifat hanya-baca. Riwayat tidak dapat diubah atau dihapus melalui antarmuka.</p><div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Kasus</th><th>Aktivitas</th><th>Aktor</th><th>Perubahan</th></tr></thead><tbody>${rows.map(e=>`<tr><td style="font-size:11px;white-space:nowrap">${new Date(e.created_at).toLocaleString('id-ID')}</td><td><a class="case-link" href="#/case/${e.case_id}">${e.case_id}</a><br><small>${esc(e.title)}</small></td><td>${esc(e.action)}<br><small>${esc(e.note||'')}</small></td><td>${esc(e.actor)}<br><small>${esc(e.role)} &middot; ${esc(e.institution)}</small></td><td style="font-size:12px">${esc(e.before_status||'—')} &rarr; ${esc(e.after_status||'—')}</td></tr>`).join('')}</tbody></table></div>`)}
+
+async function documents(){
+  if(!featureAllowed('documents')){
+    app.innerHTML=shell('Registrasi Dokumen & QR','', 'documents');
+    return;
+  }
+  const isCentral=activeRole==='central';
+  const content=isCentral
+    ?`<p class="notice">Pemerintah Pusat meninjau dokumen yang ditujukan ke pusat. Baca metadata dan catatan daerah, lalu setujui atau minta perbaikan dengan alasan.</p><div id="document-list" class="section"></div>`
+    :`<p class="notice">Dokumen daerah dikirim ke Pemerintah Pusat untuk ditinjau. QR hanya memuat tautan verifikasi metadata, bukan isi dokumen sensitif.</p><form id="doc" method="post" enctype="multipart/form-data" onsubmit="event.preventDefault()"><div class="form-grid"><label>Judul dokumen<input name="title" required></label><label>ID kasus terkait (opsional)<input name="caseId" value="${esc(guidedDemoActive?localStorage.getItem('sitap-guided-case-id')||'':'')}" placeholder="SITAP-ASP-2026-000001"></label><label>Instansi pengaju<input name="sourceInstitution" value="${esc(activeProfile.institution||profileAreaLabel(activeProfile.area))}" required></label><label>Instansi tujuan (otomatis)<input name="targetInstitution" value="Pemerintah Pusat - Kementerian SITAP Demo" readonly required></label><label>Nomor surat<input name="letterNumber" required></label><label>Tanggal surat<input type="date" name="letterDate" required></label></div><label>Deskripsi<textarea name="description"></textarea></label><label>File dokumen simulasi<input type="file" name="file" accept=".pdf,.doc,.docx"></label><button type="submit">Daftarkan dan kirim ke pusat</button></form><div id="doc-result"></div><div id="document-list" class="section"></div>`;
+  app.innerHTML=shell(isCentral?'Pemeriksaan Dokumen Pusat':'Registrasi Dokumen & QR',content,'documents');
+  const host=$('#document-list');
+
+  async function loadDocuments(){
+    try{
+      const docs=await api('/api/documents');
+      if(!Array.isArray(docs))throw Error('Daftar dokumen tidak tersedia. Mulai ulang server SITAP lalu coba kembali.');
+      host.innerHTML=`<div class="panel"><div class="panel-title"><h3>${isCentral?'Dokumen masuk':'Riwayat dokumen'}</h3><small>${docs.length} dokumen</small></div>${docs.length?`<div class="table-wrap"><table><thead><tr><th>Dokumen</th><th>Asal &amp; tujuan</th><th>Status</th><th>Catatan pemeriksaan</th><th>QR</th>${isCentral?'<th>Tindakan pusat</th>':''}</tr></thead><tbody>${docs.map(doc=>{
+        const awaiting=doc.status==='Menunggu Persetujuan Pusat'||doc.status==='Perlu Perbaikan';
+        return `<tr><td><b>${esc(doc.document_id)}</b><br>${esc(doc.title)}${doc.case_id?`<br><small>Kasus ${esc(doc.case_id)}</small>`:''}</td><td>${esc(doc.source_institution)}<br><small>→ ${esc(doc.target_institution)}</small></td><td>${esc(doc.status)}${doc.reviewed_by?`<br><small>Ditinjau ${esc(doc.reviewed_by)}</small>`:''}</td><td>${esc(doc.review_note||'—')}</td><td><a href="/api/documents/${encodeURIComponent(doc.document_id)}/qr.png" download>Unduh QR</a></td>${isCentral?`<td>${awaiting?`<form class="document-review" data-document="${esc(doc.document_id)}" onsubmit="event.preventDefault()"><textarea name="note" required placeholder="Catatan pemeriksaan pusat"></textarea><div class="actions"><button type="submit" name="decision" value="approve">Setujui</button><button type="submit" class="secondary" name="decision" value="reject">Minta perbaikan</button></div></form>`:'—'}</td>`:''}</tr>`;
+      }).join('')}</tbody></table></div>`:'<p class="empty-note">Belum ada dokumen.</p>'}</div>`;
+      if(isCentral)host.querySelectorAll('.document-review').forEach(form=>form.addEventListener('submit',async event=>{
+        event.preventDefault();
+        const decision=event.submitter?.value;
+        if(!decision){toast('Pilih persetujuan atau permintaan perbaikan.');return}
+        try{
+          const result=await api(`/api/documents/${encodeURIComponent(form.dataset.document)}/review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profileId:activeProfile.id,decision,note:new FormData(form).get('note')})});
+          toast(result.status==='Disetujui Pusat'?'Dokumen disetujui Pemerintah Pusat.':'Dokumen dikembalikan untuk perbaikan.');
+          await loadDocuments();
+        }catch(error){toast(error.message)}
+      }));
+      return true;
+    }catch(error){
+      host.innerHTML=`<p class="role-warning" role="alert">Riwayat dokumen gagal dimuat: ${esc(error.message)}</p>`;
+      return false;
+    }
+  }
+
+  if(isCentral){await loadDocuments();return}
+  $('#doc').addEventListener('submit',async e=>{
+    e.preventDefault();
+    try{
+      const body=new FormData(e.target);
+      body.append('profileId',activeProfile.id);
+      const r=await api('/api/documents',{method:'POST',body});
+      $('#doc-result').innerHTML=`<div class="card section"><h3>Dokumen dikirim ke Pemerintah Pusat</h3><p><b>${esc(r.documentId)}</b><br>Status: Menunggu Persetujuan Pusat. QR memuat tautan verifikasi metadata.</p><img src="/api/documents/${encodeURIComponent(r.documentId)}/qr.png" width="180" alt="QR verifikasi ${esc(r.documentId)}"><div class="actions"><a class="button" href="/api/documents/${encodeURIComponent(r.documentId)}/qr.png" download>Unduh QR PNG</a><a class="button secondary" href="/api/documents/${encodeURIComponent(r.documentId)}/cover-sheet">Unduh Lembar Kendali PDF</a><a class="button secondary" href="#/verify/${encodeURIComponent(r.token)}">Buka Verifikasi</a></div></div>`;
+      toast('Dokumen tercatat dan menunggu persetujuan pusat.');
+      if(guidedDemoActive&&demoStep===6){window.demoNav(1);return}
+      await loadDocuments();
+    }catch(x){toast(x.message)}
+  });
+  await loadDocuments();
+}
 
 async function verify(token){try{const d=await api(`/api/verify/${token}`);app.innerHTML=`<section class="section" style="max-width:680px;margin:auto"><div class="eyebrow">Verifikasi Dokumen</div><h1>Metadata Dokumen SITAP</h1><div class="card"><p class="notice">Halaman ini hanya menampilkan metadata yang boleh dipublikasikan. Pemindaian QR tidak mengesahkan keputusan apa pun.</p>${[['ID Dokumen',d.document_id],['Judul',d.title],['Instansi Pengaju',d.source_institution],['Instansi Tujuan',d.target_institution],['Nomor Surat',d.letter_number],['Tanggal Surat',d.letter_date],['Status',d.status]].map(x=>`<p><b>${x[0]}</b><br>${esc(x[1])}</p>`).join('')}<a class="button secondary" href="#/">Kembali ke Beranda</a></div></section>`}catch(e){app.innerHTML='<p>Token verifikasi tidak valid.</p>'}}
 
 async function roleDashboard(role){
   const s=await stats();
-  if(role==='admin'){app.innerHTML=shell('Data Simulasi',`<div class="role-summary"><b>Administrator Demo</b> mengelola skenario purwarupa. Perubahan ini tidak merepresentasikan administrasi produksi.</div>${statCards(s)}<div class="panel"><h3>Reset Skenario Demonstrasi</h3><p class="muted">Pulihkan seluruh kasus, keputusan, dokumen, dan audit log ke dataset awal sebelum presentasi berikutnya.</p><button onclick="window.resetDemo()" style="margin-top:10px">Reset ke Data Awal</button></div>`);return}
-  if(role==='auditor'){return audit()}
-  if(role==='citizen'){app.innerHTML=shell('Dashboard Masyarakat',`<div class="dashboard-hero"><div class="hero-kicker">PROFIL DEMO &middot; ANDI PRATAMA</div><h2>Pengajuan Anda</h2><p>Lacak status, keputusan, dan progres realisasi dari satu tempat.</p></div><div class="role-summary"><b>Peran Anda:</b> Masyarakat. Anda dapat membuat pengajuan baru, membuka detail pengajuan sendiri, dan memberikan evaluasi ketika tahapnya tersedia.</div>${statCards(s)}<div class="quick-actions"><a class="button" href="#/new">+ Buat Pengajuan</a><a class="button secondary" href="#/mine">Lihat Pengajuan Saya</a></div>`);return}
+  if(role==='admin'){app.innerHTML=shell('Data Simulasi',`<div class="role-summary"><b>Administrator Demo</b> mengelola skenario purwarupa. Perubahan ini tidak merepresentasikan administrasi produksi.</div>${statCards(s)}<div class="panel"><h3>Reset Skenario Demonstrasi</h3><p class="muted">Pulihkan seluruh kasus, keputusan, dokumen, dan audit log ke dataset awal sebelum presentasi berikutnya.</p><button onclick="window.resetDemo()" style="margin-top:10px"${featureAllowed('admin-data')?'':' disabled'}>Reset ke Data Awal</button></div>`,'admin-data');return}
+  if(role==='auditor'){app.innerHTML=shell('Ringkasan Audit',`${statCards(s)}<div class="panel section"><h3>Pengawasan aktivitas</h3><p class="muted">Tinjau perubahan status dan aktivitas seluruh peran melalui log audit baca-saja.</p><a class="button" href="#/audit">Buka Audit Trail</a></div>`,'dashboard');return}
+  if(role==='citizen'){app.innerHTML=shell('Dashboard Masyarakat',`<div class="dashboard-hero"><div class="hero-kicker">PROFIL DEMO &middot; ${esc(activeProfile.name.toUpperCase())} &middot; ${esc(profileAreaLabel(activeProfile.area).toUpperCase())}</div><h2>Informasi nasional, detail wilayah Anda</h2><p>Telusuri program dan hasil yang diumumkan di seluruh Indonesia. Tahapan rinci tersedia untuk wilayah domisili ${esc(profileAreaLabel(activeProfile.area))} atau pengajuan milik Anda.</p></div><div class="role-summary"><b>Prinsip akses:</b> informasi publik lintas daerah tetap dapat dicari; detail administratif mengikuti profil, wilayah, dan kewenangan.</div>${statCards(s)}<div class="quick-actions"><a class="button" href="#/public">Buka Informasi Publik</a><a class="button secondary" href="#/new">+ Buat Pengajuan</a><a class="button secondary" href="#/mine">Lihat Pengajuan Saya</a></div>`);return}
   const config={village:['Dashboard Desa','Verifikasi awal dan penerusan pengajuan yang masuk ke wilayah desa.','Kotak Masuk','Verifikasi kelengkapan, klasifikasi, dan teruskan ke instansi berwenang.'],district:['Dashboard Kecamatan','Koordinasi pengajuan lintas desa dan pemantauan tindak lanjut wilayah.','Antrean Koordinasi','Tinjau pengajuan dari desa sebelum diteruskan ke instansi.'],opd:['Dashboard Instansi','Pantau penanganan teknis, progres pelaksanaan, dan bukti realisasi.','Antrean Penanganan','Perbarui progres atau bukti pada pengajuan yang telah diteruskan.'],official:['Dashboard Keputusan','Telaah pengajuan yang membutuhkan keputusan formal dalam simulasi.','Antrean Keputusan','Keputusan selalu membutuhkan alasan dan dasar pertimbangan.']}[role]||['Dashboard','Ringkasan aktivitas peran simulasi.','Inbox','Buka antrean pengajuan.'];
-  app.innerHTML=shell(config[0],`<div class="dashboard-hero"><div class="hero-kicker">PERAN SIMULASI &middot; ${roles[role][0].toUpperCase()}</div><h2>${config[0]}</h2><p>${config[1]}</p></div><div class="role-summary"><b>Ruang lingkup tindakan:</b> ${config[3]} Setiap perubahan direkam pada audit trail bersama.</div>${statCards(s)}<div class="dashboard-grid"><div class="panel"><div class="panel-title"><div><h3>${config[2]}</h3><small class="muted">Pilih pengajuan untuk menampilkan tindakan yang diizinkan</small></div><a href="#/inbox">Buka semua &rarr;</a></div><div class="empty-note">Gunakan antrean untuk meninjau dan memproses pengajuan sesuai kewenangan Anda.</div></div><div class="panel"><h3>Akses cepat</h3><div class="quick-actions section"><a class="button" href="#/inbox">Buka Inbox</a>${role==='opd'?'<a class="button secondary" href="#/documents">Dokumen & QR</a>':''}</div></div></div>`)
+  const inboxPanel=`<div class="panel"><div class="panel-title"><div><h3>${config[2]}</h3><small class="muted">Pilih pengajuan untuk menampilkan tindakan yang diizinkan</small></div><a href="#/inbox">Buka semua &rarr;</a></div><div class="empty-note">Gunakan antrean untuk meninjau dan memproses pengajuan sesuai kewenangan Anda.</div></div>`;
+  const dashboardPanels=role==='opd'
+    ?`<div class="dashboard-grid">${inboxPanel}<div class="panel"><h3>Akses cepat</h3><div class="quick-actions section"><a class="button secondary" href="#/documents">Dokumen & QR</a></div></div></div>`
+    :inboxPanel;
+  app.innerHTML=shell(config[0],`<div class="dashboard-hero"><div class="hero-kicker">PERAN SIMULASI &middot; ${roles[role][0].toUpperCase()}</div><h2>${config[0]}</h2><p>${config[1]}</p></div><div class="role-summary"><b>Ruang lingkup tindakan:</b> ${config[3]} Setiap perubahan direkam pada audit trail bersama.</div>${statCards(s)}${dashboardPanels}`,'dashboard');
 }
 
-async function resetDemo(){if(!confirm('Reset seluruh data simulasi ke kondisi awal?'))return;try{await api('/api/reset',{method:'POST'});toast('Data dipulihkan. Memuat ulang…');setTimeout(()=>location.reload(),900)}catch(x){toast(x.message)}}
+async function resetDemo(){if(!featureAllowed('admin-data')){toast('Reset data hanya tersedia untuk role Administrator Demo.');return}if(!confirm('Reset seluruh data simulasi ke kondisi awal?'))return;try{await api('/api/reset',{method:'POST'});localStorage.removeItem('sitap-guided-case-id');localStorage.setItem('sitap-demo-step','0');toast('Data dipulihkan. Memuat ulang…');setTimeout(()=>location.reload(),900)}catch(x){toast(x.message)}}
 
 window.pickRole=()=>location.hash='#/explore';
-window.selectRole=setRole;
-window.demoNav=n=>{demoStep=Math.max(0,Math.min(demo.length-1,demoStep+n));localStorage.setItem('sitap-demo-step',demoStep);demoPage()};
-window.openDemoStep=()=>{let d=demo[demoStep];activeRole=d[2];localStorage.setItem('sitap-role',activeRole);location.hash=d[3]};
+window.selectProfile=profileId=>setProfile(profileId);
+window.demoNav=n=>{
+  if(n>0&&demoStep===demo.length-1){window.closeGuidedDemo();return}
+  demoStep=Math.max(0,Math.min(demo.length-1,demoStep+n));
+  localStorage.setItem('sitap-demo-step',demoStep);
+  renderDemoGuide();
+  window.openDemoStep();
+};
+window.openDemoStep=()=>{
+  const step=demo[demoStep];
+  if(!step)return;
+  if(activeProfile.id===step.profileId){
+    if(location.hash===step.href)route();
+    else location.hash=step.href;
+  }else setProfile(step.profileId,step.href);
+};
+window.closeGuidedDemo=()=>{
+  guidedDemoActive=false;
+  localStorage.removeItem('sitap-guided-demo');
+  renderDemoGuide();
+};
 window.resetDemo=resetDemo;
 
 async function route(){
   const p=location.hash.slice(2)||'';
+  const notificationsPanel=$('#notifications-panel'),notificationsToggle=$('#notifications-toggle');
+  notificationsPanel.hidden=true;
+  notificationsToggle.setAttribute('aria-expanded','false');
+  notificationsToggle.setAttribute('aria-label','Buka notifikasi');
   syncProfileDropdown();
   if(p==='demo'&&!demoMode)setDemoMode(true);
+  if(p==='demo'&&!guidedDemoActive){guidedDemoActive=true;localStorage.setItem('sitap-guided-demo','true')}
+  renderDemoGuide();
   document.body.classList.toggle('home-page', !p);
   try{
-    if(activeRole==='public'&&['new','mine','inbox','documents','audit'].includes(p)){toast('Akses ini memerlukan pemilihan peran simulasi yang sesuai.');location.hash='#/public';return}
     if(!p)return landing();
     if(p==='public')return publicPage();
+    if(p==='dashboard')return roleDashboard(activeRole);
+    if(p==='cases')return casesPage();
+    if(p==='statistics')return statisticsPage();
+    if(p==='map')return mapPage();
+    if(p==='report')return reportPage();
     if(p==='explore')return rolePicker();
     if(p==='demo')return demoPage();
     if(p==='new')return newCase();
     if(p==='mine')return mine();
+    if(p==='notifications'){location.hash='#/dashboard';return}
     if(p==='inbox')return inbox();
     if(p==='audit')return audit();
     if(p==='documents')return documents();
+    if(p.startsWith('public-case/'))return caseDetail(decodeURIComponent(p.slice(12)),'public');
     if(p.startsWith('case/'))return caseDetail(decodeURIComponent(p.slice(5)));
     if(p.startsWith('verify/'))return verify(p.slice(7));
-    if(p.startsWith('role/'))return roleDashboard(p.slice(5));
+    if(p.startsWith('role/')){const role=p.slice(5),profile=profiles.find(item=>item.role===role);if(profile&&activeProfile.role!==role){activeProfile=profile;activeRole=profile.role;localStorage.setItem('sitap-profile',profile.id);syncProfileDropdown()}return roleDashboard(activeRole)}
     if(p==='about'){app.innerHTML='<section class="section"><h1>Panduan SITAP</h1><p class="notice">SITAP adalah prototype demonstrasi konsep, bukan sistem pemerintah resmi atau pengganti SP4N-LAPOR!, SIPD, Musrenbang, maupun SPBE.</p><p>Mulai dari Demo Terpandu untuk mengikuti satu alur, atau Jelajahi Manual untuk mencoba tiap peran.</p></section>';return}
     landing()
   }catch(e){app.innerHTML=`<div class="card"><h2>Terjadi kendala</h2><p>${esc(e.message)}</p><button onclick="location.reload()">Muat ulang</button></div>`}
