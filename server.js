@@ -8,7 +8,9 @@ import { db, migrate, addEvent, now } from './db.js';
 
 migrate();
 if (!db.prepare('SELECT 1 FROM cases LIMIT 1').get()) await import('./scripts/seed.js');
-const app = express(); const upload = multer({ dest: 'uploads/', limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadDir = process.env.SITAP_UPLOAD_DIR || (process.env.VERCEL ? '/tmp/sitap/uploads' : 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+const app = express(); const upload = multer({ dest: uploadDir, limits: { fileSize: 5 * 1024 * 1024 } });
 app.use(express.json()); app.use(express.static('public'));
 const demoProfiles = {
   'citizen-ahmad':{id:'citizen-ahmad',name:'Ahmad Pratama',role:'citizen',area:{province:'Jawa Tengah',regency:'Kota Semarang',district:'Kecamatan Tembalang',village:'Kelurahan Tembalang'}},

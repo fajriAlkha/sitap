@@ -29,6 +29,8 @@ Repository ini menyertakan `render.yaml` untuk membuat web service Node.js di Re
 
 Blueprint menggunakan paket gratis tanpa persistent disk. Database SQLite dan berkas yang diunggah dapat hilang saat service dimulai ulang atau deploy ulang; gunakan hanya untuk demo dengan data fiktif.
 
+Untuk preview Vercel tanpa akun, CLI Vercel dapat menjalankan deploy sementara dari root repository dengan `npx vercel deploy --temporary`. Database dan upload pada environment Vercel disimpan di `/tmp/sitap` dan tidak persisten; deployment sementara juga akan kedaluwarsa. Gunakan hanya untuk demo dengan data fiktif.
+
 ## Profil simulasi
 
 Informasi Publik adalah menu yang tersedia untuk semua profil, bukan role login. Saat pertama kali dibuka, aplikasi memakai profil Ahmad Pratama, masyarakat berdomisili di Kelurahan Tembalang, Kota Semarang. Pemilih profil di header beralih di antara contoh masyarakat, operator desa/kecamatan, OPD, pejabat, Pemerintah Pusat, auditor, dan administrator demo. Profil Andi Pratama di Desa Sukamaju dipertahankan agar data seed lama tetap dapat dijelajahi.
